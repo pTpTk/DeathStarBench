@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strconv"
+	"context"
 
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/dialer"
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/registry"
@@ -23,6 +24,12 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-xray-sdk-go/v2/instrumentation/awsv2"
+	lambdaSDK"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
 var (
@@ -39,6 +46,8 @@ type Server struct {
 	reviewClient         review.ReviewClient
 	attractionsClient    attractions.AttractionsClient
 	reservationClient    reservation.ReservationClient
+
+	lambdaClient         lambdaSDK.Client
 
 	KnativeDns string
 	IpAddr     string
@@ -86,6 +95,10 @@ func (s *Server) Run() error {
 	}
 
 	if err := s.initAttractionsClient("srv-attractions"); err != nil {
+		return err
+	}
+
+	if err := s.initLambda(); err != nil {
 		return err
 	}
 
@@ -188,6 +201,18 @@ func (s *Server) initReservation(name string) error {
 		return fmt.Errorf("dialer error: %v", err)
 	}
 	s.reservationClient = reservation.NewReservationClient(conn)
+	return nil
+}
+
+func (s *Server) initLambda() error {
+	sdkConfig, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		fmt.Println("Couldn't load default configuration. Have you set up your AWS account?")
+		return err
+	}
+	awsv2.AWSV2Instrumentor(&sdkConfig.APIOptions)
+	s.lambdaClient = *lambdaSDK.NewFromConfig(sdkConfig)
+
 	return nil
 }
 
@@ -561,7 +586,12 @@ func (s *Server) userHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check username and password
-	recResp, err := s.userClient.CheckUser(ctx, &user.Request{
+	// recResp, err := s.userClient.CheckUser(ctx, &user.Request{
+	// 	Username: username,
+	// 	Password: password,
+	// })
+
+	recResp, err := s.checkUser(ctx, &user.Request{
 		Username: username,
 		Password: password,
 	})
@@ -704,4 +734,49 @@ func checkDataFormat(date string) bool {
 		}
 	}
 	return true
+}
+
+type HandlerType int
+const (
+	KUBERNETES = iota
+	LAMBDA
+)
+
+func (s *Server) decideHandlerType() HandlerType {
+	return LAMBDA
+}
+
+type fn func(context.Context, interface{})
+
+func (s *Server) checkUser(ctx context.Context, req *user.Request) user.Result, error {
+	if s.decideHandlerType() == KUBERNETES {
+		return userCLient.CheckUser(ctx, req)
+	}
+
+		var out user.Result
+		err := s.invokeLambda(ctx, "user", *req, &out)
+		return out, err
+}
+
+func (s *Server) invokeLambda(ctx context.Context, name string, req interface{}, out interface{}) error {
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.lambdaClient.Invoke(ctx, &lambdaSDK.InvokeInput{
+		FunctionName: aws.String(name),
+		LogType:      types.LogTypeNone,
+		Payload:      payload,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(resp.Payload, out)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
