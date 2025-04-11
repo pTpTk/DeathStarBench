@@ -205,7 +205,7 @@ func (s *Server) initReservation(name string) error {
 }
 
 func (s *Server) initLambda() error {
-	sdkConfig, err := config.LoadDefaultConfig(context.TODO())
+	sdkConfig, err := config.LoadDefaultConfig(context.TODO(), config.withSharedCredentialsFiles("../credentials"))
 	if err != nil {
 		fmt.Println("Couldn't load default configuration. Have you set up your AWS account?")
 		return err
@@ -748,14 +748,14 @@ func (s *Server) decideHandlerType() HandlerType {
 
 type fn func(context.Context, interface{})
 
-func (s *Server) checkUser(ctx context.Context, req *user.Request) user.Result, error {
+func (s *Server) checkUser(ctx context.Context, req *user.Request) (*user.Result, error) {
 	if s.decideHandlerType() == KUBERNETES {
-		return userCLient.CheckUser(ctx, req)
+		return s.userClient.CheckUser(ctx, req)
 	}
 
 		var out user.Result
 		err := s.invokeLambda(ctx, "user", *req, &out)
-		return out, err
+		return &out, err
 }
 
 func (s *Server) invokeLambda(ctx context.Context, name string, req interface{}, out interface{}) error {
