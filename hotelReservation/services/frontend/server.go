@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"context"
@@ -24,12 +25,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-xray-sdk-go/v2/instrumentation/awsv2"
-	lambdaSDK"github.com/aws/aws-sdk-go-v2/service/lambda"
-	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
 var (
@@ -46,8 +41,6 @@ type Server struct {
 	reviewClient         review.ReviewClient
 	attractionsClient    attractions.AttractionsClient
 	reservationClient    reservation.ReservationClient
-
-	lambdaClient         lambdaSDK.Client
 
 	KnativeDns string
 	IpAddr     string
@@ -95,10 +88,6 @@ func (s *Server) Run() error {
 	}
 
 	if err := s.initAttractionsClient("srv-attractions"); err != nil {
-		return err
-	}
-
-	if err := s.initLambda(); err != nil {
 		return err
 	}
 
@@ -201,18 +190,6 @@ func (s *Server) initReservation(name string) error {
 		return fmt.Errorf("dialer error: %v", err)
 	}
 	s.reservationClient = reservation.NewReservationClient(conn)
-	return nil
-}
-
-func (s *Server) initLambda() error {
-	sdkConfig, err := config.LoadDefaultConfig(context.TODO(), config.withSharedCredentialsFiles("../credentials"))
-	if err != nil {
-		fmt.Println("Couldn't load default configuration. Have you set up your AWS account?")
-		return err
-	}
-	awsv2.AWSV2Instrumentor(&sdkConfig.APIOptions)
-	s.lambdaClient = *lambdaSDK.NewFromConfig(sdkConfig)
-
 	return nil
 }
 
@@ -753,27 +730,25 @@ func (s *Server) checkUser(ctx context.Context, req *user.Request) (*user.Result
 		return s.userClient.CheckUser(ctx, req)
 	}
 
-		var out user.Result
-		err := s.invokeLambda(ctx, "user", *req, &out)
-		return &out, err
+	baseURL := "https://3he4m3mbcgztrsv3n2h2d27ry40wfiag.lambda-url.us-east-2.on.aws/"
+	url := baseURL + "?username=" + req.Username + "&password=" + req.Password
+	fmt.Println(url)
+
+	var out user.Result
+	err := s.invokeLambda(url, &out)
+	return &out, err
 }
 
-func (s *Server) invokeLambda(ctx context.Context, name string, req interface{}, out interface{}) error {
-	payload, err := json.Marshal(req)
+func (s *Server) invokeLambda(url string, out interface{}) error {
+	resp, err := http.Get(url)
 	if err != nil {
+		fmt.Println("Error creating request:", err)
 		return err
 	}
+	defer resp.Body.Close()
+    body, err := ioutil.ReadAll(resp.Body)
 
-	resp, err := s.lambdaClient.Invoke(ctx, &lambdaSDK.InvokeInput{
-		FunctionName: aws.String(name),
-		LogType:      types.LogTypeNone,
-		Payload:      payload,
-	})
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(resp.Payload, out)
+	err = json.Unmarshal(body, out)
 	if err != nil {
 		return err
 	}

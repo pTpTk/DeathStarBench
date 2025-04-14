@@ -13,7 +13,6 @@ COPY services/ services/
 COPY tls/ tls/
 COPY tracing/ tracing/
 COPY tune/ tune/
-COPY $HOME/.aws/credentials services/credentials
 
 COPY config.json config.json
 
