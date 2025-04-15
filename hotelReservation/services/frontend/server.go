@@ -252,9 +252,9 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Trace().Msg("SearchHandler gets searchResp")
-	//for _, hid := range searchResp.HotelIds {
-	//	log.Trace().Msgf("Search Handler hotelId = %s", hid)
-	//}
+	for _, hid := range searchResp.HotelIds {
+		log.Trace().Msgf("Search Handler hotelId = %s", hid)
+	}
 
 	// grab locale from query params or default to en
 	locale := r.URL.Query().Get("locale")
@@ -724,9 +724,12 @@ func (s *Server) decideHandlerType() HandlerType {
 }
 
 func (s *Server) nearby(ctx context.Context, req *search.NearbyRequest) (*search.SearchResult, error) {
-	if s.decideHandlerType() == KUBERNETES {
-		return s.searchClient.Nearby(ctx, req)
-	}
+	// if s.decideHandlerType() == KUBERNETES {
+	// 	return s.searchClient.Nearby(ctx, req)
+	// }
+
+	kubeOut,_ := s.searchClient.Nearby(ctx, req)
+	fmt.Println(kubeOut)
 
 	baseURL := "https://k2coxpcvdti43frihmo3gytf6q0ilojc.lambda-url.us-east-2.on.aws/"
 	url := baseURL + "?inDate=" + req.InDate + "&outDate=" + req.OutDate + 
