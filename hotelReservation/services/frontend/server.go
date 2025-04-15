@@ -279,7 +279,7 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 	log.Trace().Msgf("searchHandler gets reserveResp.HotelId = %s", reservationResp.HotelId)
 
 	// hotel profiles
-	profileResp, err := s.profileClient.GetProfiles(ctx, &profile.Request{
+	profileResp, err := s.getProfiles(ctx, &profile.Request{
 		HotelIds: reservationResp.HotelId,
 		Locale:   locale,
 	})
