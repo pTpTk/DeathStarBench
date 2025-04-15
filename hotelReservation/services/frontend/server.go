@@ -749,7 +749,7 @@ func (s *Server) checkAvailability(ctx context.Context, req *reservation.Request
 	baseURL := "https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/check"
 	url := baseURL + "?"
 	for _, h := range req.HotelId {
-		url += ("hotelIds=" + h + "&")
+		url += ("hotelId=" + h + "&")
 	}
 	url += ("inDate=" + req.InDate + "&outDate=" + req.OutDate + "&roomNumber=1")
 	fmt.Println(url)
