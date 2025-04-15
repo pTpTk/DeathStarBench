@@ -797,8 +797,10 @@ func (s *Server) invokeLambda(url string, out interface{}) error {
 	defer resp.Body.Close()
     body, err := ioutil.ReadAll(resp.Body)
 
+	fmt.Println("resp body: ", string(body))
 	err = json.Unmarshal(body, out)
 	if err != nil {
+		fmt.Println("Error unmarshaling result, ", err)
 		return err
 	}
 
