@@ -240,7 +240,7 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Trace().Msgf("SEARCH [lat: %v, lon: %v, inDate: %v, outDate: %v", lat, lon, inDate, outDate)
 	// search for best hotels
-	searchResp, err := s.searchClient.Nearby(ctx, &search.NearbyRequest{
+	searchResp, err := s.nearby(ctx, &search.NearbyRequest{
 		Lat:     lat,
 		Lon:     lon,
 		InDate:  inDate,
@@ -262,7 +262,7 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 		locale = "en"
 	}
 
-	reservationResp, err := s.reservationClient.CheckAvailability(ctx, &reservation.Request{
+	reservationResp, err := s.checkAvailability(ctx, &reservation.Request{
 		CustomerName: "",
 		HotelId:      searchResp.HotelIds,
 		InDate:       inDate,
@@ -723,14 +723,63 @@ func (s *Server) decideHandlerType() HandlerType {
 	return LAMBDA
 }
 
-type fn func(context.Context, interface{})
+func (s *Server) nearby(ctx context.Context, req *search.NearbyRequest) (*search.SearchResult, error) {
+	if s.decideHandlerType() == KUBERNETES {
+		return s.searchClient.Nearby(ctx, req)
+	}
+
+	baseURL := "https://k2coxpcvdti43frihmo3gytf6q0ilojc.lambda-url.us-east-2.on.aws/"
+	url := baseURL + "?inDate=" + req.InDate + "&outDate=" + req.OutDate + 
+		"&lat=" + strconv.FormatFloat(float64(req.Lat),'f',-1,32) + "&lon=" + strconv.FormatFloat(float64(req.Lon),'f',-1,32)
+	fmt.Println(url)
+
+	var out search.SearchResult
+	err := s.invokeLambda(url, &out)
+	return &out, err
+}
+
+func (s *Server) checkAvailability(ctx context.Context, req *reservation.Request) (*reservation.Result, error) {
+	if s.decideHandlerType() == KUBERNETES {
+		return s.reservationClient.CheckAvailability(ctx, req)
+	}
+
+	baseURL := "https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/check"
+	url := baseURL + "?"
+	for _, h := range req.HotelId {
+		url += ("hotelIds=" + h + "&")
+	}
+	url += ("inDate=" + req.InDate + "&outDate=" + req.OutDate + "&roomNumber=1")
+	fmt.Println(url)
+
+	var out reservation.Result
+	err := s.invokeLambda(url, &out)
+	return &out, err
+}
+
+func (s *Server) getProfiles(ctx context.Context, req *profile.Request) (*profile.Result, error) {
+	if s.decideHandlerType() == KUBERNETES {
+		return s.profileClient.GetProfiles(ctx, req)
+	}
+
+	baseURL := "https://de53neoj2avvgjfgvauhmsmlli0eactb.lambda-url.us-east-2.on.aws/"
+	url := baseURL + "?"
+	for _, h := range req.HotelIds {
+		url += ("hotelIds=" + h + "&")
+	}
+	url += ("locale=" + req.Locale)
+	fmt.Println(url)
+
+	var out profile.Result
+	err := s.invokeLambda(url, &out)
+	return &out, err
+}
 
 func (s *Server) checkUser(ctx context.Context, req *user.Request) (*user.Result, error) {
 	if s.decideHandlerType() == KUBERNETES {
 		return s.userClient.CheckUser(ctx, req)
 	}
 
-	baseURL := "https://3he4m3mbcgztrsv3n2h2d27ry40wfiag.lambda-url.us-east-2.on.aws/"
+	baseURL := "https://hklpcrrfrfbo3cx2gpayzo6lty0ubgnc.lambda-url.us-east-2.on.aws/"
 	url := baseURL + "?username=" + req.Username + "&password=" + req.Password
 	fmt.Println(url)
 
