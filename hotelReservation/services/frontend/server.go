@@ -315,7 +315,7 @@ func (s *Server) recommendHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// recommend hotels
-	recResp, err := s.recommendationClient.GetRecommendations(ctx, &recommendation.Request{
+	recResp, err := s.getRecommendations(ctx, &recommendation.Request{
 		Require: require,
 		Lat:     float64(lat),
 		Lon:     float64(lon),
@@ -332,7 +332,7 @@ func (s *Server) recommendHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// hotel profiles
-	profileResp, err := s.profileClient.GetProfiles(ctx, &profile.Request{
+	profileResp, err := s.getProfiles(ctx, &profile.Request{
 		HotelIds: recResp.HotelIds,
 		Locale:   locale,
 	})
@@ -629,7 +629,7 @@ func (s *Server) reservationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check username and password
-	recResp, err := s.userClient.CheckUser(ctx, &user.Request{
+	recResp, err := s.checkUser(ctx, &user.Request{
 		Username: username,
 		Password: password,
 	})
@@ -644,7 +644,7 @@ func (s *Server) reservationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Make reservation
-	resResp, err := s.reservationClient.MakeReservation(ctx, &reservation.Request{
+	resResp, err := s.makeReservation(ctx, &reservation.Request{
 		CustomerName: customerName,
 		HotelId:      []string{hotelId},
 		InDate:       inDate,
@@ -755,6 +755,39 @@ func (s *Server) checkAvailability(ctx context.Context, req *reservation.Request
 	fmt.Println(url)
 
 	var out reservation.Result
+	err := s.invokeLambda(url, &out)
+	return &out, err
+}
+
+func (s *Server) makeReservation(ctx context.Context, req *reservation.Request) (*reservation.Result, error) {
+	if s.decideHandlerType() == KUBERNETES {
+		return s.reservationClient.MakeReservation(ctx, req)
+	}
+
+	baseURL := "https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/reserve"
+	url := baseURL + "?"
+	for _, h := range req.HotelId {
+		url += ("hotelId=" + h + "&")
+	}
+	url += ("inDate=" + req.InDate + "&outDate=" + req.OutDate + "&roomNumber=1")
+	fmt.Println(url)
+
+	var out reservation.Result
+	err := s.invokeLambda(url, &out)
+	return &out, err
+}
+
+func (s *Server) getRecommendations(ctx context.Context, req *recommendation.Request) (*recommendation.Result, error) {
+	if s.decideHandlerType() == KUBERNETES {
+		return s.recommendationClient.GetRecommendations(ctx, req)
+	}
+
+	baseURL := "https://ryeeszilkopelj5yzygg75kt4y0jbwob.lambda-url.us-east-2.on.aws/"
+	url := baseURL + "?require=" + req.Require + "&lat=" + strconv.FormatFloat(req.Lat,'f',-1,64) + 
+		"&lon=" + strconv.FormatFloat(req.Lon,'f',-1,64)
+	fmt.Println(url)
+
+	var out recommendation.Result
 	err := s.invokeLambda(url, &out)
 	return &out, err
 }
