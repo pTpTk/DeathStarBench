@@ -724,9 +724,9 @@ func (s *Server) decideHandlerType() HandlerType {
 }
 
 func (s *Server) nearby(ctx context.Context, req *search.NearbyRequest) (*search.SearchResult, error) {
-	// if s.decideHandlerType() == KUBERNETES {
-	// 	return s.searchClient.Nearby(ctx, req)
-	// }
+	if s.decideHandlerType() == KUBERNETES {
+		return s.searchClient.Nearby(ctx, req)
+	}
 
 	kubeOut,_ := s.searchClient.Nearby(ctx, req)
 	fmt.Println(kubeOut)

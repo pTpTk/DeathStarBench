@@ -203,7 +203,7 @@ func (s *Server) RateHandler(ctx context.Context, req *rate.Request) (*rate.Resu
 		return s.rateClient.GetRates(ctx, req)
 	}
 
-	baseURL := "https://ivwdmxjk2d7ey73hea7lxbeb2y0dfgmu.lambda-url.us-east-2.on.aws/"
+	baseURL := "https://rjybrykceun2wjgz7bj54hx3x40phpei.lambda-url.us-east-2.on.aws/"
 	url := baseURL + "?"
 	for _, h := range req.HotelIds {
 		url += ("hotelIds=" + h + "&")
