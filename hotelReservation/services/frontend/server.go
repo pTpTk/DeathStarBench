@@ -252,8 +252,12 @@ func (s *Server) searchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Trace().Msg("SearchHandler gets searchResp")
-	for _, hid := range searchResp.HotelIds {
-		log.Trace().Msgf("Search Handler hotelId = %s", hid)
+	// for _, hid := range searchResp.HotelIds {
+	// 	log.Trace().Msgf("Search Handler hotelId = %s", hid)
+	// }
+	if len(searchResp.HotelIds) == 0 {
+		json.NewEncoder(w).Encode(geoJSONResponse([]*profile.Hotel{}))
+		return
 	}
 
 	// grab locale from query params or default to en
