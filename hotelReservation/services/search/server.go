@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
+	"os"
 
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/dialer"
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/registry"
@@ -188,7 +189,7 @@ func (s *Server) GeoHandler(ctx context.Context, req *geo.Request) (*geo.Result,
 		return s.geoClient.Nearby(ctx, req)
 	}
 
-	baseURL := "https://ivwdmxjk2d7ey73hea7lxbeb2y0dfgmu.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("GEO_AWS_URL")
 	url := baseURL + "?lat=" + strconv.FormatFloat(float64(req.Lat),'f',-1,32) + 
 		"&lon=" + strconv.FormatFloat(float64(req.Lon),'f',-1,32)
 	fmt.Println(url)
@@ -203,7 +204,7 @@ func (s *Server) RateHandler(ctx context.Context, req *rate.Request) (*rate.Resu
 		return s.rateClient.GetRates(ctx, req)
 	}
 
-	baseURL := "https://rjybrykceun2wjgz7bj54hx3x40phpei.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("RATE_AWS_URL")
 	url := baseURL + "?"
 	for _, h := range req.HotelIds {
 		url += ("hotelIds=" + h + "&")

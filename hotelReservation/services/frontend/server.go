@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"context"
+	"os"
 
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/dialer"
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/registry"
@@ -735,7 +736,7 @@ func (s *Server) nearby(ctx context.Context, req *search.NearbyRequest) (*search
 	kubeOut,_ := s.searchClient.Nearby(ctx, req)
 	fmt.Println(kubeOut)
 
-	baseURL := "https://k2coxpcvdti43frihmo3gytf6q0ilojc.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("SEARCH_AWS_URL")
 	url := baseURL + "?inDate=" + req.InDate + "&outDate=" + req.OutDate + 
 		"&lat=" + strconv.FormatFloat(float64(req.Lat),'f',-1,32) + "&lon=" + strconv.FormatFloat(float64(req.Lon),'f',-1,32)
 	fmt.Println(url)
@@ -750,7 +751,7 @@ func (s *Server) checkAvailability(ctx context.Context, req *reservation.Request
 		return s.reservationClient.CheckAvailability(ctx, req)
 	}
 
-	baseURL := "https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/check"
+	baseURL := os.Getenv("RESERVATION_AWS_URL") + "check"
 	url := baseURL + "?"
 	for _, h := range req.HotelId {
 		url += ("hotelId=" + h + "&")
@@ -768,7 +769,7 @@ func (s *Server) makeReservation(ctx context.Context, req *reservation.Request) 
 		return s.reservationClient.MakeReservation(ctx, req)
 	}
 
-	baseURL := "https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/reserve"
+	baseURL := os.Getenv("RESERVATION_AWS_URL") + "reserve"
 	url := baseURL + "?"
 	for _, h := range req.HotelId {
 		url += ("hotelId=" + h + "&")
@@ -786,7 +787,7 @@ func (s *Server) getRecommendations(ctx context.Context, req *recommendation.Req
 		return s.recommendationClient.GetRecommendations(ctx, req)
 	}
 
-	baseURL := "https://ryeeszilkopelj5yzygg75kt4y0jbwob.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("RECOMMENDATION_AWS_URL")
 	url := baseURL + "?require=" + req.Require + "&lat=" + strconv.FormatFloat(req.Lat,'f',-1,64) + 
 		"&lon=" + strconv.FormatFloat(req.Lon,'f',-1,64)
 	fmt.Println(url)
@@ -801,7 +802,7 @@ func (s *Server) getProfiles(ctx context.Context, req *profile.Request) (*profil
 		return s.profileClient.GetProfiles(ctx, req)
 	}
 
-	baseURL := "https://de53neoj2avvgjfgvauhmsmlli0eactb.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("PROFILE_AWS_URL")
 	url := baseURL + "?"
 	for _, h := range req.HotelIds {
 		url += ("hotelIds=" + h + "&")
@@ -819,7 +820,7 @@ func (s *Server) checkUser(ctx context.Context, req *user.Request) (*user.Result
 		return s.userClient.CheckUser(ctx, req)
 	}
 
-	baseURL := "https://hklpcrrfrfbo3cx2gpayzo6lty0ubgnc.lambda-url.us-east-2.on.aws/"
+	baseURL := os.Getenv("USER_AWS_URL")
 	url := baseURL + "?username=" + req.Username + "&password=" + req.Password
 	fmt.Println(url)
 

@@ -16,5 +16,8 @@ COPY tune/ tune/
 
 COPY config.json config.json
 
+ENV SEARCH_AWS_URL=https://k2coxpcvdti43frihmo3gytf6q0ilojc.lambda-url.us-east-2.on.aws/
+ENV RESERVATION_AWS_URL=https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/
+
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on GOBIN=/workspace go install -ldflags="-s -w" -mod=vendor ./cmd/...
 
