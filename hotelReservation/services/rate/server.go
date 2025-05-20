@@ -165,6 +165,7 @@ func (s *Server) GetRates(ctx context.Context, req *pb.Request) (*pb.Result, err
 							log.Error().Msgf("Failed to marshal plan [Code: %v] with error: %s", r.Code, err)
 						}
 						memcStr = memcStr + string(rateJson) + "\n"
+						break
 					}
 				}
 				go s.MemcClient.Set(&memcache.Item{Key: id, Value: []byte(memcStr)})
