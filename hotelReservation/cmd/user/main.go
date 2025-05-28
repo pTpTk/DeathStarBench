@@ -14,6 +14,11 @@ import (
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/tune"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"fmt"
+	"context"
 )
 
 func main() {
@@ -37,6 +42,8 @@ func main() {
 	log.Info().Msg("Initializing DB connection...")
 	mongoClient, mongoClose := initializeDatabase(result["UserMongoAddress"])
 	defer mongoClose()
+
+	dynamoTest()
 
 	servPort, _ := strconv.Atoi(result["UserPort"])
 	servIP := result["UserIP"]
@@ -71,4 +78,27 @@ func main() {
 
 	log.Info().Msg("Starting server...")
 	log.Fatal().Msg(srv.Run().Error())
+}
+
+func dynamoTest(){
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+    if err != nil {
+        panic(err)
+    }
+
+    svc := dynamodb.NewFromConfig(cfg)
+    p := dynamodb.NewListTablesPaginator(svc, nil, func(o *dynamodb.ListTablesPaginatorOptions) {
+        o.StopOnDuplicateToken = true
+    })
+
+    for p.HasMorePages() {
+        out, err := p.NextPage(context.TODO())
+        if err != nil {
+            panic(err)
+        }
+
+        for _, tn := range out.TableNames {
+            fmt.Println(tn)
+        }
+    }
 }
