@@ -18,6 +18,11 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 )
 
 const name = "srv-user"
@@ -34,6 +39,7 @@ type Server struct {
 	Port        int
 	IpAddr      string
 	MongoClient *mongo.Client
+	DynamoClient *dynamodb.Client
 }
 
 // Run starts the server
@@ -42,9 +48,9 @@ func (s *Server) Run() error {
 		return fmt.Errorf("server port must be set")
 	}
 
-	if s.users == nil {
-		s.users = loadUsers(s.MongoClient)
-	}
+	// if s.users == nil {
+	// 	s.users = loadUsers(s.MongoClient)
+	// }
 
 	s.uuid = uuid.New().String()
 
@@ -90,16 +96,35 @@ func (s *Server) Shutdown() {
 // CheckUser returns whether the username and password are correct.
 func (s *Server) CheckUser(ctx context.Context, req *pb.Request) (*pb.Result, error) {
 	res := new(pb.Result)
+	res.Correct = false
 
 	log.Trace().Msg("CheckUser")
 
 	sum := sha256.Sum256([]byte(req.Password))
 	pass := fmt.Sprintf("%x", sum)
 
-	res.Correct = false
-	if true_pass, found := s.users[req.Username]; found {
-		res.Correct = pass == true_pass
+	curr, err := s.DynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String("User_User"),
+		Key: map[string]types.AttributeValue{
+            "username": &types.AttributeValueMemberS{Value: req.Username},
+        },
+	})
+	if err != nil {
+		log.Error().Msgf("", err)
 	}
+
+	// username not found
+	if len(curr.Item) == 0 {
+		return res, nil
+	}
+
+	var user User
+	err = attributevalue.UnmarshalMap(curr.Item, &user)
+	if err != nil {
+		log.Error().Msgf("", err)
+	}
+
+	res.Correct = pass == user.Password
 
 	log.Trace().Msgf("CheckUser %d", res.Correct)
 

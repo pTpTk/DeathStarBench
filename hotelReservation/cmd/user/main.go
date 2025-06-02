@@ -17,7 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"fmt"
+	"github.com/aws/aws-xray-sdk-go/v2/instrumentation/awsv2"
 	"context"
 )
 
@@ -43,7 +43,7 @@ func main() {
 	mongoClient, mongoClose := initializeDatabase(result["UserMongoAddress"])
 	defer mongoClose()
 
-	dynamoTest()
+	dynamoClient := initializeDynamo()
 
 	servPort, _ := strconv.Atoi(result["UserPort"])
 	servIP := result["UserIP"]
@@ -74,31 +74,19 @@ func main() {
 		Tracer:      tracer,
 		Registry:    registry,
 		MongoClient: mongoClient,
+		DynamoClient: dynamoClient,
 	}
 
 	log.Info().Msg("Starting server...")
 	log.Fatal().Msg(srv.Run().Error())
 }
 
-func dynamoTest(){
+func initializeDynamo() *dynamodb.Client{
 	cfg, err := config.LoadDefaultConfig(context.TODO())
     if err != nil {
         panic(err)
     }
 
-    svc := dynamodb.NewFromConfig(cfg)
-    p := dynamodb.NewListTablesPaginator(svc, nil, func(o *dynamodb.ListTablesPaginatorOptions) {
-        o.StopOnDuplicateToken = true
-    })
-
-    for p.HasMorePages() {
-        out, err := p.NextPage(context.TODO())
-        if err != nil {
-            panic(err)
-        }
-
-        for _, tn := range out.TableNames {
-            fmt.Println(tn)
-        }
-    }
+	awsv2.AWSV2Instrumentor(&cfg.APIOptions)
+	return dynamodb.NewFromConfig(cfg)
 }
