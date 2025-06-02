@@ -30,6 +30,9 @@ spec:
             - ./user
           image: ptptk/hotel-reservation:latest
           name: hotel-reserv-user
+          volumeMounts:
+            - mountPath: /home/.aws
+              name: aws-config-vol
           ports:
             - containerPort: 8086
           resources:
@@ -38,4 +41,8 @@ spec:
             limits:
               cpu: 1000m
       restartPolicy: Always
+      volumes:
+        - name: aws-config-vol
+          configMap:
+            name: aws-config
 status: {}

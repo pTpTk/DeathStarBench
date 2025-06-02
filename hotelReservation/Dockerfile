@@ -16,6 +16,8 @@ COPY tune/ tune/
 
 COPY config.json config.json
 
+ENV HOME=/home
+
 ENV SEARCH_AWS_URL=https://k2coxpcvdti43frihmo3gytf6q0ilojc.lambda-url.us-east-2.on.aws/
 ENV RESERVATION_AWS_URL=https://pfsu72jzcsqtbwsnrhaadtyh5a0uhpci.lambda-url.us-east-2.on.aws/
 ENV RECOMMENDATION_AWS_URL=https://ryeeszilkopelj5yzygg75kt4y0jbwob.lambda-url.us-east-2.on.aws/
