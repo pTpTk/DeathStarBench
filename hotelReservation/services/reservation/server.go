@@ -21,6 +21,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 )
 
 const name = "srv-reservation"
@@ -37,6 +42,7 @@ type Server struct {
 	MongoClient *mongo.Client
 	Registry    *registry.Client
 	MemcClient  *memcache.Client
+	DynamoClient *dynamodb.Client
 }
 
 // Run starts the server
@@ -95,10 +101,6 @@ func (s *Server) MakeReservation(ctx context.Context, req *pb.Request) (*pb.Resu
 	res := new(pb.Result)
 	res.HotelId = make([]string, 0)
 
-	database := s.MongoClient.Database("reservation-db")
-	resCollection := database.Collection("reservation")
-	numCollection := database.Collection("number")
-
 	inDate, _ := time.Parse(
 		time.RFC3339,
 		req.InDate+"T12:00:00+00:00")
@@ -110,81 +112,57 @@ func (s *Server) MakeReservation(ctx context.Context, req *pb.Request) (*pb.Resu
 
 	indate := inDate.String()[0:10]
 
-	memc_date_num_map := make(map[string]int)
+	var num Number
+	numOut, err := s.DynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String("Reservation_Number"),
+		Key: map[string]types.AttributeValue{
+			"hotelId": &types.AttributeValueMemberS{Value: hotelId},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	err = attributevalue.UnmarshalMap(numOut.Item, &num)
+	if err != nil {
+		panic(err)
+	}
+
+	hotel_cap := int(num.Number)
 
 	for inDate.Before(outDate) {
 		// check reservations
 		count := 0
 		inDate = inDate.AddDate(0, 0, 1)
 		outdate := inDate.String()[0:10]
+		inout := indate + "_" + outdate
 
-		// first check memc
-		memc_key := hotelId + "_" + inDate.String()[0:10] + "_" + outdate
-		item, err := s.MemcClient.Get(memc_key)
-		if err == nil {
-			// memcached hit
-			count, _ = strconv.Atoi(string(item.Value))
-			log.Trace().Msgf("memcached hit %s = %d", memc_key, count)
-			memc_date_num_map[memc_key] = count + int(req.RoomNumber)
-
-		} else if err == memcache.ErrCacheMiss {
-			// memcached miss
-			log.Trace().Msgf("memcached miss")
-			var reserve []reservation
-
-			filter := bson.D{{"hotelId", hotelId}, {"inDate", indate}, {"outDate", outdate}}
-			curr, err := resCollection.Find(context.TODO(), filter)
-			if err != nil {
-				log.Error().Msgf("Failed get reservation data: ", err)
-			}
-			curr.All(context.TODO(), &reserve)
-			if err != nil {
-				log.Panic().Msgf("Tried to find hotelId [%v] from date [%v] to date [%v], but got error", hotelId, indate, outdate, err.Error())
-			}
-
-			for _, r := range reserve {
-				count += r.Number
-			}
-
-			memc_date_num_map[memc_key] = count + int(req.RoomNumber)
-
-		} else {
-			log.Panic().Msgf("Tried to get memc_key [%v], but got memmcached error = %s", memc_key, err)
+		var reserve []Reservation
+		
+		resOut, err := s.DynamoClient.Query(ctx, &dynamodb.QueryInput{
+			TableName: aws.String("Reservation_Reservation"),
+			KeyConditionExpression: aws.String("hotelId = :hotelId and in_out = :in_out"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":hotelId": &types.AttributeValueMemberS{Value: hotelId},
+				":in_out":  &types.AttributeValueMemberS{Value: inout},
+			},
+		})
+		if err != nil {
+			panic(err)
 		}
 
-		// check capacity
-		// check memc capacity
-		memc_cap_key := hotelId + "_cap"
-		item, err = s.MemcClient.Get(memc_cap_key)
-		hotel_cap := 0
-		if err == nil {
-			// memcached hit
-			hotel_cap, _ = strconv.Atoi(string(item.Value))
-			log.Trace().Msgf("memcached hit %s = %d", memc_cap_key, hotel_cap)
-		} else if err == memcache.ErrCacheMiss {
-			// memcached miss
-			var num number
-			err = numCollection.FindOne(context.TODO(), &bson.D{{"hotelId", hotelId}}).Decode(&num)
-			if err != nil {
-				log.Panic().Msgf("Tried to find hotelId [%v], but got error", hotelId, err.Error())
-			}
-			hotel_cap = int(num.Number)
-
-			// write to memcache
-			s.MemcClient.Set(&memcache.Item{Key: memc_cap_key, Value: []byte(strconv.Itoa(hotel_cap))})
-		} else {
-			log.Panic().Msgf("Tried to get memc_cap_key [%v], but got memmcached error = %s", memc_cap_key, err)
+		err = attributevalue.UnmarshalListOfMaps(resOut.Items, &reserve)
+		if err != nil {
+			panic(err)
+		}
+		
+		for _, r := range reserve {
+			count += r.Number
 		}
 
 		if count+int(req.RoomNumber) > hotel_cap {
 			return res, nil
 		}
 		indate = outdate
-	}
-
-	// only update reservation number cache after check succeeds
-	for key, val := range memc_date_num_map {
-		s.MemcClient.Set(&memcache.Item{Key: key, Value: []byte(strconv.Itoa(val))})
 	}
 
 	inDate, _ = time.Parse(
@@ -196,19 +174,29 @@ func (s *Server) MakeReservation(ctx context.Context, req *pb.Request) (*pb.Resu
 	for inDate.Before(outDate) {
 		inDate = inDate.AddDate(0, 0, 1)
 		outdate := inDate.String()[0:10]
-		_, err := resCollection.InsertOne(
-			context.TODO(),
-			reservation{
-				HotelId:      hotelId,
-				CustomerName: req.CustomerName,
-				InDate:       indate,
-				OutDate:      outdate,
-				Number:       int(req.RoomNumber),
-			},
-		)
-		if err != nil {
-			log.Panic().Msgf("Tried to insert hotel [hotelId %v], but got error", hotelId, err.Error())
+
+		r := Reservation{
+			HotelId:      hotelId,
+			CustomerName: req.CustomerName,
+			InDate:       indate,
+			OutDate:      outdate,
+			Number:       int(req.RoomNumber),
+			InOut:        indate + "_" + outdate,
 		}
+
+		av, err := attributevalue.MarshalMap(r)
+		if err != nil {
+			panic(err)
+		}
+
+        _, err = s.DynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+            TableName: aws.String("Reservation_Reservation"),
+            Item: av,
+        })
+		if err != nil {
+			panic(err)
+		}
+
 		indate = outdate
 	}
 
@@ -421,4 +409,18 @@ type reservation struct {
 type number struct {
 	HotelId string `bson:"hotelId"`
 	Number  int    `bson:"numberOfRoom"`
+}
+
+type Reservation struct {
+	HotelId      string `dynamodbav:"hotelId"`
+	CustomerName string `dynamodbav:"customerName"`
+	InDate       string `dynamodbav:"inDate"`
+	OutDate      string `dynamodbav:"outDate"`
+	Number       int    `dynamodbav:"number"`
+	InOut		 string `dynamodbav:"in_out"`
+}
+
+type Number struct {
+	HotelId string `dynamodbav:"hotelId"`
+	Number  int    `dynamodbav:"numberOfRoom"`
 }

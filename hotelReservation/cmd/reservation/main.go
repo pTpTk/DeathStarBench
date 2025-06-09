@@ -14,6 +14,11 @@ import (
 	"github.com/delimitrou/DeathStarBench/tree/master/hotelReservation/tune"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-xray-sdk-go/v2/instrumentation/awsv2"
+	"context"
 )
 
 func main() {
@@ -36,6 +41,8 @@ func main() {
 	log.Info().Msg("Initializing DB connection...")
 	mongoClient, mongoClose := initializeDatabase(result["ReserveMongoAddress"])
 	defer mongoClose()
+
+	dynamoClient := initializeDynamo()
 
 	log.Info().Msgf("Read profile memcashed address: %v", result["ReserveMemcAddress"])
 	log.Info().Msg("Initializing Memcashed client...")
@@ -72,8 +79,19 @@ func main() {
 		IpAddr:      servIP,
 		MongoClient: mongoClient,
 		MemcClient:  memcClient,
+		DynamoClient:  dynamoClient,
 	}
 
 	log.Info().Msg("Starting server...")
 	log.Fatal().Msg(srv.Run().Error())
+}
+
+func initializeDynamo() *dynamodb.Client{
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+    if err != nil {
+        panic(err)
+    }
+
+	awsv2.AWSV2Instrumentor(&cfg.APIOptions)
+	return dynamodb.NewFromConfig(cfg)
 }
